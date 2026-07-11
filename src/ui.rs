@@ -296,7 +296,7 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
         .build();
     let by_label = Label::builder()
         .use_markup(true)
-        .label(" • by <a href='https://github.com/agzes'>agzes</a>")
+        .label(" • by <a href='https://github.com/aneek0'>aneeko</a>")
         .halign(Align::Start)
         .css_classes(["app-subtitle"])
         .build();
@@ -331,7 +331,7 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
     right_vbox.append(
         &Label::builder()
             .use_markup(true)
-            .label("<a href='https://github.com/agzes/AntiAFK-RBX-Sober'>GITHUB</a>")
+            .label("<a href='https://github.com/aneek0/Sober-AntiAFK'>GITHUB</a>")
             .css_classes(["badge-link"])
             .halign(Align::End)
             .build(),
