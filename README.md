@@ -1,9 +1,3 @@
-<p align="center">
-  <img src="readme/antiafk-rbx.png" alt="AntiAFK-RBX-Sober">
-</p>
-
----
-
 Anti-AFK application for **Sober** (Roblox on Linux). Fork of [AntiAFK-RBX-Sober](https://github.com/Agzes/AntiAFK-RBX-Sober) with **Niri** support.
 
 Supports **Hyprland**, **KDE Plasma 6**, and **Niri**.
