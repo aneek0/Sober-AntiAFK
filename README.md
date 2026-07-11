@@ -21,10 +21,9 @@ Supports **Hyprland**, **KDE Plasma 6**, and **Niri**.
 
 ## Installation
 
-### Homebrew (Linuxbrew)
+### Cargo
 ```bash
-brew tap aneeko/sober-antiafk https://github.com/aneek0/Sober-AntiAFK
-brew install sober-antiafk
+cargo install AntiAFK-RBX-Sober
 ```
 
 ### AppImage
