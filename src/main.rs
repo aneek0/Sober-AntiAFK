@@ -294,15 +294,6 @@ fn main() -> glib::ExitCode {
             window.set_visible(false);
         }
 
-        if crate::state::AppState::is_niri() {
-            let app_id = crate::state::APP_ID.to_string();
-            glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
-                let _ = std::process::Command::new("niri")
-                    .args(["msg", "action", "focus-window", "-e", &format!("app-id:{app_id}")])
-                    .output();
-            });
-        }
-
         #[allow(deprecated)]
         let (tx, rx) = glib::MainContext::channel(glib::Priority::default());
         let tray = AntiAFKTray {

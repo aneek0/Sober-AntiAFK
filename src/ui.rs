@@ -187,7 +187,6 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
         .title("AntiAFK-RBX")
         .default_width(420)
         .default_height(580)
-        .resizable(false)
         .build();
     window.add_css_class("main-window");
     window.set_icon_name(Some(crate::state::APP_ID));
