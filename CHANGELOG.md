@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.1] Niri Support - 2026-07-11
+
+### Added
+- **Niri Support**: Full support for Niri compositor.
+  - New input method: **"Niri"** using `niri msg` CLI for window and workspace management.
+  - Automatic desktop environment detection extended to Niri.
+
+### Changed
+- **Renamed**: "FPS Capper" → "CPU Quota Limiter" (reflects actual functionality).
+- Updated UI strings and documentation to reflect Niri as a supported desktop.
+
+---
+
 ## [0.2.0] KDE Plasma 6 Support - 2026-03-28
 
 ### Added

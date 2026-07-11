@@ -10,6 +10,7 @@ use gtk::prelude::*;
 use image::GenericImageView;
 use state::SharedState;
 use std::sync::{Arc, Mutex};
+use nix::libc;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -244,7 +245,26 @@ fn files_match(p1: &std::path::Path, p2: &std::path::Path) -> bool {
     true
 }
 
+extern "C" fn sig_handler(sig: libc::c_int) {
+    let output = std::process::Command::new("pgrep").args(["-if", "sober|roblox|vinegar|Sober.bin"]).output().ok();
+    if let Some(out) = output {
+        let s = String::from_utf8_lossy(&out.stdout);
+        for line in s.lines() {
+            if let Ok(pid) = line.trim().parse::<i32>() {
+                unsafe {
+                    libc::kill(pid, libc::SIGCONT);
+                }
+            }
+        }
+    }
+    std::process::exit(128 + sig);
+}
+
 fn main() -> glib::ExitCode {
+    unsafe {
+        libc::signal(libc::SIGINT, sig_handler as *const () as libc::sighandler_t);
+        libc::signal(libc::SIGTERM, sig_handler as *const () as libc::sighandler_t);
+    }
     sync_binary();
     let args = Args::parse();
 

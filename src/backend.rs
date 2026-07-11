@@ -1,10 +1,12 @@
 use crate::state::{SharedState, APP_ID};
 use notify_rust::Notification;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
+use nix::sys::signal::{kill, Signal};
+use nix::unistd::Pid;
 
 pub fn start_backend(state: SharedState) {
     let state_auto = state.clone();
@@ -41,7 +43,7 @@ pub fn start_backend(state: SharedState) {
 
     let state_fps = state.clone();
     thread::spawn(move || {
-        let mut active_scopes: HashMap<String, u32> = HashMap::new();
+        let mut throttled_pids: HashSet<i32> = HashSet::new();
         let my_pid = std::process::id().to_string();
         loop {
             let (enabled, fps_limit, stop_on_focus, is_running, action_active) = {
@@ -49,39 +51,48 @@ pub fn start_backend(state: SharedState) {
                 (s.fps_capper, s.fps_limit, s.stop_limit_on_focus, s.running, s.action_active)
             };
 
-            if enabled && is_running && fps_limit > 0 && !action_active {
-                let mut current_target_scopes = HashSet::new();
+            let should_throttle = enabled && is_running && fps_limit > 0 && !action_active && !(stop_on_focus && is_focused_sober());
+
+
+            if should_throttle {
                 let main_pids = get_all_sober_pids(&my_pid);
-                for pid in &main_pids {
-                    if let Some(scope) = get_systemd_scope(pid) {
-                        if scope.contains("app") || scope.contains("sober") || scope.contains("vinegar") {
-                            current_target_scopes.insert(scope);
+                let pids: Vec<i32> = main_pids.iter().filter_map(|p| p.parse::<i32>().ok()).collect();
+                
+                for &pid in &pids {
+                    throttled_pids.insert(pid);
+                }
+
+                if !pids.is_empty() {
+                    let limit = fps_limit.clamp(3, 95) as u64;
+                    let run_time = limit;
+                    let sleep_time = 100 - limit;
+
+                    for &pid in &pids {
+                        let res = kill(Pid::from_raw(pid), Signal::SIGCONT);
+                        if let Err(e) = res {
+                            eprintln!("Failed to SIGCONT {}: {:?}", pid, e);
                         }
                     }
-                }
+                    thread::sleep(Duration::from_millis(run_time));
 
-                if stop_on_focus && is_focused_sober() {
-                    reset_scopes(&mut active_scopes);
-                    thread::sleep(Duration::from_millis(500));
-                    continue;
-                }
-
-                let quota = fps_limit.clamp(3, 99);
-                active_scopes.retain(|s, _| {
-                    if current_target_scopes.contains(s) { true }
-                    else { set_cpu_limit(s, ""); false }
-                });
-
-                for scope in &current_target_scopes {
-                    if active_scopes.get(scope) != Some(&quota) {
-                        set_cpu_limit(scope, &format!("{quota}%"));
-                        active_scopes.insert(scope.clone(), quota);
+                    for &pid in &pids {
+                        let res = kill(Pid::from_raw(pid), Signal::SIGSTOP);
+                        if let Err(e) = res {
+                            eprintln!("Failed to SIGSTOP {}: {:?}", pid, e);
+                        }
                     }
+                    thread::sleep(Duration::from_millis(sleep_time));
+                } else {
+                    thread::sleep(Duration::from_millis(200));
                 }
-                thread::sleep(Duration::from_secs(1));
             } else {
-                reset_scopes(&mut active_scopes);
-                thread::sleep(Duration::from_millis(500));
+                if !throttled_pids.is_empty() {
+                    for pid in &throttled_pids {
+                        let _ = kill(Pid::from_raw(*pid), Signal::SIGCONT);
+                    }
+                    throttled_pids.clear();
+                }
+                thread::sleep(Duration::from_millis(200));
             }
         }
     });
@@ -98,6 +109,7 @@ pub fn start_backend(state: SharedState) {
                 let res = match mode {
                     0 => crate::inputs::swapper::run(&state_main),
                     1 => crate::inputs::plasma::run(&state_main),
+                    2 => crate::inputs::niri::run(&state_main),
                     _ => Ok(()),
                 };
 
@@ -173,46 +185,81 @@ fn is_focused_sober() -> bool {
                 }
             }
         }
+    } else if is_niri() {
+        if let Ok(out) = Command::new("niri").args(["msg", "--json", "windows"]).output() {
+            if let Ok(json) = serde_json::from_slice::<Value>(&out.stdout) {
+                if let Some(arr) = json.as_array() {
+                    for win in arr {
+                        if win.get("is_focused").and_then(|v| v.as_bool()).unwrap_or(false) {
+                            let app_id = win.get("app_id").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                            let title = win.get("title").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                            return app_id.contains("sober") || title.contains("roblox") || app_id.contains("vinegar") || app_id == "sober";
+                        }
+                    }
+                }
+            }
+        }
     }
     false
 }
 
-fn set_cpu_limit(scope: &str, limit: &str) {
-    let val = if limit.is_empty() { "" } else { limit };
-    let _ = Command::new("systemctl").args(["--user", "set-property", scope, &format!("CPUQuota={val}")]).output();
-}
 
-fn reset_scopes(scopes: &mut HashMap<String, u32>) {
-    for scope in scopes.keys() { set_cpu_limit(scope, ""); }
-    scopes.clear();
-}
 
 fn check_sober_running() -> bool {
     !get_all_sober_pids(&std::process::id().to_string()).is_empty()
 }
 
-fn get_systemd_scope(pid: &str) -> Option<String> {
-    let cgroup = std::fs::read_to_string(format!("/proc/{pid}/cgroup")).ok()?;
-    for line in cgroup.lines() {
-        if let Some(path) = line.split("::").nth(1) {
-            if let Some(scope) = path.split('/').next_back() {
-                if scope.ends_with(".scope") || scope.ends_with(".service") {
-                    return Some(scope.to_string());
+
+
+fn get_all_sober_pids(exclude_pid: &str) -> Vec<String> {
+    let mut target_pids = HashSet::new();
+    let my_pid = exclude_pid.to_string();
+
+    let output = Command::new("pgrep").args(["-if", "sober|roblox|vinegar|Sober.bin"]).output().ok();
+    if let Some(out) = output {
+        let s = String::from_utf8_lossy(&out.stdout);
+        for line in s.lines() {
+            let pid = line.trim().to_string();
+            if !pid.is_empty() && pid != my_pid {
+                if let Ok(comm) = std::fs::read_to_string(format!("/proc/{pid}/comm")) {
+                    let comm_lower = comm.to_lowercase();
+                    if comm_lower.contains("antiafk") {
+                        continue;
+                    }
+                }
+
+                target_pids.insert(pid.clone());
+
+                if let Ok(cgroup) = std::fs::read_to_string(format!("/proc/{pid}/cgroup")) {
+                    for cg_line in cgroup.lines() {
+                        if let Some(path) = cg_line.split("::").nth(1) {
+                            if !path.is_empty() && path != "/" {
+                                let path_lower = path.to_lowercase();
+                                if (path_lower.contains("sober") || path_lower.contains("vinegar") || path_lower.contains("roblox") || path_lower.contains("flatpak"))
+                                    && !path_lower.contains("inir")
+                                    && !path_lower.contains("antiafk")
+                                    && !path_lower.contains("kitty")
+                                    && !path_lower.contains("terminal")
+                                {
+                                    let cgroup_dir = format!("/sys/fs/cgroup{}", path);
+                                    if let Ok(procs) = std::fs::read_to_string(format!("{}/cgroup.procs", cgroup_dir)) {
+                                        for proc_line in procs.lines() {
+                                            let p = proc_line.trim().to_string();
+                                            if !p.is_empty() && p != my_pid {
+                                                target_pids.insert(p);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-    None
-}
 
-fn get_all_sober_pids(exclude_pid: &str) -> Vec<String> {
-    let output = Command::new("pgrep").args(["-if", "sober|roblox|vinegar|Sober.bin"]).output().ok();
-    if let Some(out) = output {
-        let s = String::from_utf8_lossy(&out.stdout);
-        let my_pid = exclude_pid.to_string();
-        return s.lines().map(|l| l.trim().to_string()).filter(|p| !p.is_empty() && p != &my_pid).collect();
-    }
-    Vec::new()
+    target_pids.into_iter().collect()
 }
 
 pub fn is_hyprland() -> bool {
@@ -220,4 +267,7 @@ pub fn is_hyprland() -> bool {
 }
 pub fn is_plasma() -> bool {
     crate::state::AppState::is_plasma()
+}
+pub fn is_niri() -> bool {
+    crate::state::AppState::is_niri()
 }

@@ -1,9 +1,8 @@
 ---
 name: 🐞 Bug Report
-about: Create a report to help us improve AntiAFK-RBX-Sober
+about: Create a report to help us improve Sober-AntiAFK
 title: '[BUG] '
 labels: bug
-assignees: Agzes
 ---
 
 **Bug description:**
@@ -21,7 +20,7 @@ If applicable, add screenshots to help explain your problem.
 **Desktop (please complete the following information):**
 
 - OS version:
-- Desktop (KDE, Hyprland etc.):
+- Desktop (KDE, Hyprland, Niri etc.):
 - Sober version:
 - AntiAFK-RBX-Sober App version:
 

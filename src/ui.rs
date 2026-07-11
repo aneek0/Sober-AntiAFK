@@ -9,7 +9,7 @@ use gtk::{
 };
 use std::process::Command;
 
-const CURRENT_VERSION: &str = "0.2.0";
+const CURRENT_VERSION: &str = "0.2.1";
 
 const CSS: &str = "
     .main-window { background-color: @theme_bg_color; color: @theme_fg_color; }
@@ -392,7 +392,7 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
         .label(
             "<span size='large' weight='800'>Wayland Only • WIP</span>\n\n\
         This project is currently a <b>Work In Progress</b>.\n\
-        It works on <b>Hyprland</b> and <b>KDE Plasma 6 (Wayland)</b>.\n\
+        It works on <b>Hyprland</b>, <b>KDE Plasma 6 (Wayland)</b> and <b>Niri</b>.\n\
         GNOME, X11 and other are <b>not</b> supported yet.",
         )
         .justify(gtk::Justification::Center)
@@ -493,9 +493,10 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
     let core_list = ListBox::new();
     core_list.add_css_class("card");
     let initial_state = { state.lock().unwrap().clone() };
-    let mode_names = vec!["Swapper", "Plasma (preview)", "Other Desktops"];
+    let mode_names = vec!["Swapper", "Plasma (preview)", "Niri", "Other Desktops"];
     let is_hypr_detected = crate::backend::is_hyprland();
     let is_plasma_detected = crate::backend::is_plasma();
+    let is_niri_detected = crate::backend::is_niri();
 
     let list_factory = gtk::SignalListItemFactory::new();
     list_factory.connect_setup(move |_, list_item| {
@@ -558,6 +559,18 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
                     "<span size='smaller' color='#ff5555' weight='bold'>Not supported</span>",
                 );
             }
+        } else if pos == 2 {
+            title.set_markup("<b>Niri</b>");
+            subtitle.set_label("Desktops: Niri");
+            if is_niri_detected {
+                wip.set_markup(
+                    "<span size='smaller' color='#8fde58' weight='bold'>Recommended</span>",
+                );
+            } else {
+                wip.set_markup(
+                    "<span size='smaller' color='#ff5555' weight='bold'>Not supported</span>",
+                );
+            }
         } else {
             title.set_markup("<b>Other Environments</b>");
             subtitle.set_label("GNOME, X11");
@@ -583,6 +596,8 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
             label.set_label("Swapper");
         } else if pos == 1 {
             label.set_label("Plasma (preview)");
+        } else if pos == 2 {
+            label.set_label("Niri");
         } else {
             label.set_label("Other (WIP)");
         }
@@ -727,8 +742,8 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
     let fps_capper_sw = Switch::new();
     fps_capper_sw.set_active(initial_state.fps_capper);
     let (row, _) = create_row(
-        "FPS Capper",
-        Some("Limit background process resources"),
+        "CPU Quota Limiter",
+        Some("Limit background process CPU usage"),
         &fps_capper_sw,
         None,
         true,
@@ -941,6 +956,7 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
     let reconnect_restrict = reconnect_sw.clone();
     let is_hyprland = crate::backend::is_hyprland();
     let is_plasma = crate::backend::is_plasma();
+    let is_niri = crate::backend::is_niri();
 
     let user_safe_row_live = user_safe_row.clone();
     let stealth_row_live = stealth_row.clone();
@@ -949,7 +965,8 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
         let stealth_row = stealth_row_live.clone();
         let is_swapper = selected_idx == 0;
         let is_plasma_mode = selected_idx == 1;
-        let is_other = selected_idx == 2;
+        let is_niri_mode = selected_idx == 2;
+        let is_other = selected_idx == 3;
         let has_uinput = check_uinput_permission();
 
         perm_warn_restrict.set_visible(!has_uinput);
@@ -961,6 +978,9 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
         } else if is_plasma_mode && !is_plasma {
             invalid = true;
             mode_warn_restrict.set_markup("<span size='small' color='#ff5555'>⚠ Plasma (preview) requires KDE Plasma 6. Your desktop is not supported.</span>");
+        } else if is_niri_mode && !is_niri {
+            invalid = true;
+            mode_warn_restrict.set_markup("<span size='small' color='#ff5555'>⚠ Niri requires Niri environment. Your desktop is not supported.</span>");
         } else if is_other {
             invalid = true;
             mode_warn_restrict.set_markup("<span size='small' color='#ff5555'>⚠ This method is in development (WIP) and cannot be started.</span>");
@@ -969,9 +989,9 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
         mode_warn_restrict.set_visible(invalid);
         toggle_btn_restrict.set_sensitive(!invalid && has_uinput);
 
-        multi_instance_restrict.set_sensitive(is_swapper || is_plasma_mode);
-        user_safe_restrict.set_sensitive(is_swapper || is_plasma_mode);
-        stealth_row.set_sensitive(is_swapper || is_plasma_mode);
+        multi_instance_restrict.set_sensitive(is_swapper || is_plasma_mode || is_niri_mode);
+        user_safe_restrict.set_sensitive(is_swapper || is_plasma_mode || is_niri_mode);
+        stealth_row.set_sensitive(is_swapper || is_plasma_mode || is_niri_mode);
 
         let mut curr = user_safe_row.first_child();
         while let Some(c1) = curr {
@@ -994,7 +1014,7 @@ pub fn build_ui(app: &Application, state: SharedState) -> ApplicationWindow {
             curr = c1.next_sibling();
         }
 
-        reconnect_restrict.set_sensitive(is_swapper || is_plasma_mode);
+        reconnect_restrict.set_sensitive(is_swapper || is_plasma_mode || is_niri_mode);
     };
 
     let umi_hover = update_mode_ui.clone();
@@ -1240,7 +1260,7 @@ fn build_compat_ui(container: Box, stack: Stack, state: SharedState) {
     } else {
         list.append(&add_compat_item(
             "Compatibility",
-            "This project currently supports only Hyprland or KDE Plasma 6 (Wayland).",
+            "This project currently supports Hyprland, KDE Plasma 6 (Wayland) and Niri.",
             None,
             ItemStatus::Error,
         ));
@@ -1349,7 +1369,7 @@ fn check_latest_version() -> Result<(bool, String), String> {
             "-s",
             "--connect-timeout",
             "3",
-            "https://raw.githubusercontent.com/agzes/AntiAFK-RBX-Sober/main/version",
+            "https://raw.githubusercontent.com/aneek0/Sober-AntiAFK/main/version",
         ])
         .output();
 

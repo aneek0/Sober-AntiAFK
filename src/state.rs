@@ -92,8 +92,10 @@ impl AppState {
             0
         } else if Self::is_plasma() {
             1
-        } else {
+        } else if Self::is_niri() {
             2
+        } else {
+            3
         }
     }
 
@@ -106,6 +108,12 @@ impl AppState {
             let v = v.to_uppercase();
             v.contains("KDE") || v.contains("PLASMA")
         }) || std::env::var("KDE_FULL_SESSION").is_ok()
+    }
+
+    pub fn is_niri() -> bool {
+        std::env::var("NIRI_SOCKET").is_ok() || std::env::var("XDG_CURRENT_DESKTOP").map_or(false, |v| {
+            v.to_lowercase() == "niri"
+        })
     }
 
     pub fn save(&self) {

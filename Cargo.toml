@@ -1,9 +1,9 @@
 [package]
 name = "AntiAFK-RBX-Sober"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "AntiAFK application for Sober (Roblox for Linux) on Linux"
-repository = "https://github.com/Agzes/AntiAFK-RBX-Sober"
+repository = "https://github.com/aneek0/Sober-AntiAFK"
 license = "MIT"
 keywords = ["roblox", "linux", "antiafk", "sober", "hyprland"]
 
@@ -18,6 +18,7 @@ clap = { version = "4.5", features = ["derive"] }
 image = "0.25"
 notify-rust = "4.11"
 dirs = "5.0"
+nix = "0.23"
 
 [package.metadata.appimage]
 name = "AntiAFK-RBX-Sober"
